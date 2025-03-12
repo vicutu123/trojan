@@ -156,7 +156,6 @@ check_fail2ban
 
 echo "🎉 安装 & 配置 Fail2Ban 完成！"
 
-}
 #写入xrayr配置文件
 xrayr_file(){
     cat > /usr/local/xrayr/config.yml << EOF
