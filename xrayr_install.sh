@@ -136,7 +136,7 @@ Nodes:
       EnableFallback: true # Only support for Trojan and Vless
      
       # ✅ 添加 WebSocket 伪装配置
-      EnableWebSocket: true # 启用 WebSocket 传输
+      EnableWebSocket: false # 启用 WebSocket 传输
       WebSocketPath: "/websocket" # WebSocket 伪装路径
       WebSocketHost: "cdn.example.com" # 绑定 Cloudflare/CDN 进行流量伪装
 
