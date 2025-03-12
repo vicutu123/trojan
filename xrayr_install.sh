@@ -134,14 +134,8 @@ Nodes:
       DNSType: AsIs # AsIs, UseIP, UseIPv4, UseIPv6, DNS strategy
       EnableProxyProtocol: false # Only works for WebSocket and TCP
       EnableFallback: true # Only support for Trojan and Vless
-     
-      # ✅ 添加 WebSocket 伪装配置
-      EnableWebSocket: false # 启用 WebSocket 传输
-      WebSocketPath: "/websocket" # WebSocket 伪装路径
-      WebSocketHost: "cdn.example.com" # 绑定 Cloudflare/CDN 进行流量伪装
-
-       FallBackConfigs:  # Support multiple fallbacks
-         -
+      FallBackConfigs:  # Support multiple fallbacks
+        -
           SNI: # TLS SNI(Server Name Indication), Empty for any
           Path: # HTTP PATH, Empty for any
           Dest: 80 # Required, Destination of fallback, check https://xtls.github.io/config/fallback/ for details.
