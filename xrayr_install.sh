@@ -55,47 +55,20 @@ check_docker() {
 	fi
 }
 
-# 工具安装
+#工具安装
 install_tool() {
-    echo "===> 开始安装必要工具"    
+    echo "===> Start to install tool"    
     if [ -x "$(command -v yum)" ]; then
         command -v curl > /dev/null || yum install -y curl
-        yum install -y fail2ban  # ✅ 安装 fail2ban
     elif [ -x "$(command -v apt)" ]; then
         command -v curl > /dev/null || apt install -y curl
-        apt install -y fail2ban  # ✅ 安装 fail2ban
     else
-        echo "不支持的系统，仅支持 yum/apt 包管理器"
-        exit 1
+        echo "Package manager is not support this OS. Only support to use yum/apt."
+        exit -1
     fi 
-
-    # ✅ 创建 XrayR 的 dns.json 文件，使用 DoH DNS 解析
-    echo "===> 配置 XrayR 自定义 DoH DNS"
-    cat > /etc/XrayR/dns.json << EOF
-{
-  "servers": [
-    "https://1.1.1.1/dns-query",
-    "https://8.8.8.8/dns-query"
-  ]
-}
-EOF
-
-    # ✅ 配置 fail2ban 保护 XrayR
-    echo "===> 配置 fail2ban 进行防护"
-    cat > /etc/fail2ban/jail.local << EOF
-[xrayr]
-enabled = true
-port = 443,8443,2087
-filter = xrayr
-logpath = /var/log/xrayr.log
-maxretry = 5
-EOF
-
-systemctl restart fail2ban  # ✅ 使 fail2ban 规则生效
-echo "✅ Fail2Ban 配置完成"
     
 }
-# ✅ 继续执行 xrayr_file() 确保脚本不中断
+#写入xrayr配置文件
 xrayr_file(){
     cat > /usr/local/xrayr/config.yml << EOF
 Log:
@@ -106,11 +79,11 @@ DnsConfigPath: # /etc/XrayR/dns.json # Path to dns config, check https://xtls.gi
 RouteConfigPath: # /etc/XrayR/route.json # Path to route config, check https://xtls.github.io/config/base/route/ for help
 OutboundConfigPath: # /etc/XrayR/custom_outbound.json # Path to custom outbound config, check https://xtls.github.io/config/base/outbound/ for help
 ConnetionConfig:
-  Handshake: 8 # Handshake time limit, Second
-  ConnIdle: 600 # Connection idle time limit, Second
-  UplinkOnly: 30 # Time limit when the connection downstream is closed, Second
-  DownlinkOnly: 60 # Time limit when the connection is closed after the uplink is closed, Second
-  BufferSize: 128 # The internal cache size of each connection, kB 
+  Handshake: 10 # Handshake time limit, Second
+  ConnIdle: 900 # Connection idle time limit, Second
+  UplinkOnly: 60 # Time limit when the connection downstream is closed, Second
+  DownlinkOnly: 120 # Time limit when the connection is closed after the uplink is closed, Second
+  BufferSize: 64 # The internal cache size of each connection, kB 
 Nodes:
   -
     PanelType: "SSpanel" # Panel type: SSpanel, V2board, PMpanel, , Proxypanel
@@ -127,13 +100,12 @@ Nodes:
       RuleListPath: # ./rulelist Path to local rulelist file
     ControllerConfig:
       ListenIP: 0.0.0.0 # IP address you want to listen
-      ListenPort: 443
       SendIP: 0.0.0.0 # IP address you want to send pacakage
       UpdatePeriodic: 60 # Time to update the nodeinfo, how many sec.
       EnableDNS: false # Use custom DNS config, Please ensure that you set the dns.json well
       DNSType: AsIs # AsIs, UseIP, UseIPv4, UseIPv6, DNS strategy
       EnableProxyProtocol: false # Only works for WebSocket and TCP
-      EnableFallback: true # Only support for Trojan and Vless
+      EnableFallback: false # Only support for Trojan and Vless
       FallBackConfigs:  # Support multiple fallbacks
         -
           SNI: # TLS SNI(Server Name Indication), Empty for any
