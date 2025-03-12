@@ -91,8 +91,8 @@ logpath = /var/log/xrayr.log
 maxretry = 5
 EOF
 
-    systemctl restart fail2ban  # ✅ 使 fail2ban 规则生效
-    echo "✅ Fail2Ban 配置完成"
+systemctl restart fail2ban  # ✅ 使 fail2ban 规则生效
+echo "✅ Fail2Ban 配置完成"
     
 }
 #写入xrayr配置文件
