@@ -82,6 +82,7 @@ EOF
     systemctl restart fail2ban
     green "✅ Fail2Ban 配置完成"
 }
+
 #写入xrayr配置文件
 xrayr_file(){
     cat > /usr/local/xrayr/config.yml << EOF
