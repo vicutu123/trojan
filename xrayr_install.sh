@@ -77,9 +77,25 @@ enabled = true
 port = 443,8443,2087
 filter = xrayr
 logpath = /var/log/xrayr.log
+maxretry = 3
+findtime = 600 # 在10分钟内发生maxretry次就封禁
+bantime = 86400 # 封禁时间1天
+action = iptables-allports  # 确保封禁所有端口
+ignoreip = 127.0.0.1 192.168.1.1  # 你的服务器IP，防止误封
+bantime.increment = true  # 每次被封禁，时间加倍
+
+[ssh]
+enabled = true
+port = 22
+filter = sshd
+logpath = /var/log/auth.log
 maxretry = 5
+findtime = 600
+bantime = 86400
+action = iptables-allports
 EOF
     systemctl restart fail2ban
+    systemctl enable fail2ban
     green "✅ Fail2Ban 配置完成"
 }
 
@@ -95,10 +111,10 @@ RouteConfigPath: # /etc/XrayR/route.json # Path to route config, check https://x
 OutboundConfigPath: # /etc/XrayR/custom_outbound.json # Path to custom outbound config, check https://xtls.github.io/config/base/outbound/ for help
 ConnetionConfig:
   Handshake: 10 # Handshake time limit, Second
-  ConnIdle: 900 # Connection idle time limit, Second
+  ConnIdle: 300 # Connection idle time limit, Second
   UplinkOnly: 60 # Time limit when the connection downstream is closed, Second
   DownlinkOnly: 120 # Time limit when the connection is closed after the uplink is closed, Second
-  BufferSize: 64 # The internal cache size of each connection, kB 
+  BufferSize: 128 # The internal cache size of each connection, kB 
 Nodes:
   -
     PanelType: "SSpanel" # Panel type: SSpanel, V2board, PMpanel, , Proxypanel
