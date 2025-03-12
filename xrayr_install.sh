@@ -55,24 +55,37 @@ check_docker() {
 	fi
 }
 
-#工具安装
+# 工具安装
 install_tool() {
-    echo "===> Start to install tool"    
+    echo "===> 开始安装必要工具"    
     if [ -x "$(command -v yum)" ]; then
-        command -v curl > /dev/null || yum install -y curl
-        yum install -y fail2ban  # ✅ 安装 fail2ban
+        yum install -y curl fail2ban iptables-services
+        systemctl enable iptables
+        systemctl restart iptables
     elif [ -x "$(command -v apt)" ]; then
-        command -v curl > /dev/null || apt install -y curl
-        apt install -y fail2ban  # ✅ 安装 fail2ban
+        apt update && apt install -y curl fail2ban iptables
     else
         echo "不支持的系统，仅支持 yum/apt 包管理器"
         exit 1
     fi 
 }
 
-# Fail2Ban 防火墙保护 XrayR
+# 自动检测 SSH 日志路径
+detect_ssh_logpath() {
+    if [[ -f "/var/log/auth.log" ]]; then
+        SSH_LOG="/var/log/auth.log"
+    else
+        SSH_LOG="/var/log/secure"
+    fi
+}
+
+# Fail2Ban 防火墙保护 XrayR & SSH
 configure_fail2ban() {
-    green "===> 配置 Fail2Ban 进行防护"
+    echo "===> 配置 Fail2Ban 进行防护"
+
+    detect_ssh_logpath  # 自动检测 SSH 日志路径
+
+    # Fail2Ban 配置
     cat > /etc/fail2ban/jail.local << EOF
 [xrayr]
 enabled = true
@@ -86,21 +99,64 @@ action = iptables-allports  # 确保封禁所有端口
 ignoreip = 127.0.0.1 192.168.1.1  # 你的服务器IP，防止误封
 bantime.increment = true  # 每次被封禁，时间加倍
 
-[ssh]
+[sshd]
 enabled = true
 port = 22
 filter = sshd
-logpath = /var/log/auth.log
+logpath = $SSH_LOG
 maxretry = 5
 findtime = 600
 bantime = 86400
 action = iptables-allports
 EOF
+
+    # 重新启动 Fail2Ban
     systemctl restart fail2ban
     systemctl enable fail2ban
-    green "✅ Fail2Ban 配置完成"
+    echo "✅ Fail2Ban 配置完成"
 }
 
+# 创建 XrayR 过滤规则
+setup_xrayr_filter() {
+    echo "===> 配置 XrayR 过滤规则"
+    cat > /etc/fail2ban/filter.d/xrayr.conf << EOF
+[Definition]
+failregex = .* \[Warning\] \[Trojan\] client \[<HOST>\] authentication failed.*
+            .* \[Warning\] \[V2ray\] client \[<HOST>\] authentication failed.*
+            .* \[Warning\] \[Shadowsocks\] client \[<HOST>\] authentication failed.*
+
+ignoreregex =
+EOF
+    echo "✅ XrayR 过滤规则已设置"
+}
+
+# 确保 fail2ban 规则正常生效
+check_fail2ban() {
+    echo "===> 检查 Fail2Ban 运行状态"
+    systemctl status fail2ban | grep "Active: active (running)"
+    if [[ $? -eq 0 ]]; then
+        echo "✅ Fail2Ban 运行正常"
+    else
+        echo "❌ Fail2Ban 运行失败，尝试重启"
+        systemctl restart fail2ban
+    fi
+
+    echo "➡  当前 XrayR 规则状态："
+    fail2ban-client status xrayr || echo "❌ XrayR 规则未生效"
+
+    echo "➡  当前 SSH 规则状态："
+    fail2ban-client status sshd || echo "❌ SSH 规则未生效"
+}
+
+# 执行所有步骤
+install_tool
+setup_xrayr_filter
+configure_fail2ban
+check_fail2ban
+
+echo "🎉 安装 & 配置 Fail2Ban 完成！"
+
+}
 #写入xrayr配置文件
 xrayr_file(){
     cat > /usr/local/xrayr/config.yml << EOF
