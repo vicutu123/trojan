@@ -59,12 +59,14 @@ check_docker() {
 install_tool() {
     echo "===> Start to install tool"    
     if [ -x "$(command -v yum)" ]; then
-        command -v curl > /dev/null || yum install -y curl fail2ban
+        command -v curl > /dev/null || yum install -y curl
+        yum install -y fail2ban  # ✅ 安装 fail2ban
     elif [ -x "$(command -v apt)" ]; then
-        command -v curl > /dev/null || apt install -y curl fail2ban
+        command -v curl > /dev/null || apt install -y curl
+        apt install -y fail2ban  # ✅ 安装 fail2ban
     else
-        echo "Package manager is not support this OS. Only support to use yum/apt."
-        exit -1
+        echo "不支持的系统，仅支持 yum/apt 包管理器"
+        exit 1
     fi 
 }
 
