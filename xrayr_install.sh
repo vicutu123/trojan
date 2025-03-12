@@ -59,14 +59,28 @@ check_docker() {
 install_tool() {
     echo "===> Start to install tool"    
     if [ -x "$(command -v yum)" ]; then
-        command -v curl > /dev/null || yum install -y curl
+        command -v curl > /dev/null || yum install -y curl fail2ban
     elif [ -x "$(command -v apt)" ]; then
-        command -v curl > /dev/null || apt install -y curl
+        command -v curl > /dev/null || apt install -y curl fail2ban
     else
         echo "Package manager is not support this OS. Only support to use yum/apt."
         exit -1
     fi 
-    
+}
+
+# Fail2Ban 防火墙保护 XrayR
+configure_fail2ban() {
+    green "===> 配置 Fail2Ban 进行防护"
+    cat > /etc/fail2ban/jail.local << EOF
+[xrayr]
+enabled = true
+port = 443,8443,2087
+filter = xrayr
+logpath = /var/log/xrayr.log
+maxretry = 5
+EOF
+    systemctl restart fail2ban
+    green "✅ Fail2Ban 配置完成"
 }
 #写入xrayr配置文件
 xrayr_file(){
@@ -105,7 +119,7 @@ Nodes:
       EnableDNS: false # Use custom DNS config, Please ensure that you set the dns.json well
       DNSType: AsIs # AsIs, UseIP, UseIPv4, UseIPv6, DNS strategy
       EnableProxyProtocol: false # Only works for WebSocket and TCP
-      EnableFallback: false # Only support for Trojan and Vless
+      EnableFallback: true # Only support for Trojan and Vless
       FallBackConfigs:  # Support multiple fallbacks
         -
           SNI: # TLS SNI(Server Name Indication), Empty for any
@@ -254,7 +268,9 @@ backend_docking_set(){
         check_docker
         xrayr_file
         crt_file
-        docker run --restart=always --name xrayr -d -v /usr/local/xrayr/config.yml:/etc/XrayR/config.yml -v /usr/local/xrayr/certificate.crt:/etc/XrayR/certificate.crt -v /usr/local/xrayr/private.key:/etc/XrayR/private.key --network=host crackair/xrayr:latest
+	configure_dns
+        configure_fail2ban
+	docker run --restart=always --name xrayr -d -v /usr/local/xrayr/config.yml:/etc/XrayR/config.yml -v /usr/local/xrayr/certificate.crt:/etc/XrayR/certificate.crt -v /usr/local/xrayr/private.key:/etc/XrayR/private.key --network=host crackair/xrayr:latest
         greenbg "恭喜您，后端节点已搭建成功"
         end=$(date "+%s")
         echo 安装总耗时:$[$end-$start]"秒"           
