@@ -55,107 +55,19 @@ check_docker() {
 	fi
 }
 
-# 工具安装
+#工具安装
 install_tool() {
-    echo "===> 开始安装必要工具"    
+    echo "===> Start to install tool"    
     if [ -x "$(command -v yum)" ]; then
-        yum install -y curl fail2ban iptables-services
-        systemctl enable iptables
-        systemctl restart iptables
+        command -v curl > /dev/null || yum install -y curl
     elif [ -x "$(command -v apt)" ]; then
-        apt update && apt install -y curl fail2ban iptables
+        command -v curl > /dev/null || apt install -y curl
     else
-        echo "不支持的系统，仅支持 yum/apt 包管理器"
-        exit 1
+        echo "Package manager is not support this OS. Only support to use yum/apt."
+        exit -1
     fi 
+    
 }
-
-# 自动检测 SSH 日志路径
-detect_ssh_logpath() {
-    if [[ -f "/var/log/auth.log" ]]; then
-        SSH_LOG="/var/log/auth.log"
-    else
-        SSH_LOG="/var/log/secure"
-    fi
-}
-
-# Fail2Ban 防火墙保护 XrayR & SSH
-configure_fail2ban() {
-    echo "===> 配置 Fail2Ban 进行防护"
-
-    detect_ssh_logpath  # 自动检测 SSH 日志路径
-
-    # Fail2Ban 配置
-    cat > /etc/fail2ban/jail.local << EOF
-[xrayr]
-enabled = true
-port = 443,8443,2087
-filter = xrayr
-logpath = /var/log/xrayr.log
-maxretry = 3
-findtime = 600 # 在10分钟内发生maxretry次就封禁
-bantime = 86400 # 封禁时间1天
-action = iptables-allports  # 确保封禁所有端口
-ignoreip = 127.0.0.1 192.168.1.1  # 你的服务器IP，防止误封
-bantime.increment = true  # 每次被封禁，时间加倍
-
-[sshd]
-enabled = true
-port = 22
-filter = sshd
-logpath = $SSH_LOG
-maxretry = 5
-findtime = 600
-bantime = 86400
-action = iptables-allports
-EOF
-
-    # 重新启动 Fail2Ban
-    systemctl restart fail2ban
-    systemctl enable fail2ban
-    echo "✅ Fail2Ban 配置完成"
-}
-
-# 创建 XrayR 过滤规则
-setup_xrayr_filter() {
-    echo "===> 配置 XrayR 过滤规则"
-    cat > /etc/fail2ban/filter.d/xrayr.conf << EOF
-[Definition]
-failregex = .* \[Warning\] \[Trojan\] client \[<HOST>\] authentication failed.*
-            .* \[Warning\] \[V2ray\] client \[<HOST>\] authentication failed.*
-            .* \[Warning\] \[Shadowsocks\] client \[<HOST>\] authentication failed.*
-
-ignoreregex =
-EOF
-    echo "✅ XrayR 过滤规则已设置"
-}
-
-# 确保 fail2ban 规则正常生效
-check_fail2ban() {
-    echo "===> 检查 Fail2Ban 运行状态"
-    systemctl status fail2ban | grep "Active: active (running)"
-    if [[ $? -eq 0 ]]; then
-        echo "✅ Fail2Ban 运行正常"
-    else
-        echo "❌ Fail2Ban 运行失败，尝试重启"
-        systemctl restart fail2ban
-    fi
-
-    echo "➡  当前 XrayR 规则状态："
-    fail2ban-client status xrayr || echo "❌ XrayR 规则未生效"
-
-    echo "➡  当前 SSH 规则状态："
-    fail2ban-client status sshd || echo "❌ SSH 规则未生效"
-}
-
-# 执行所有步骤
-install_tool
-setup_xrayr_filter
-configure_fail2ban
-check_fail2ban
-
-echo "🎉 安装 & 配置 Fail2Ban 完成！"
-
 #写入xrayr配置文件
 xrayr_file(){
     cat > /usr/local/xrayr/config.yml << EOF
@@ -182,7 +94,7 @@ Nodes:
       NodeType: Trojan # Node type: V2ray, Shadowsocks, Trojan, Shadowsocks-Plugin
       Timeout: 30 # Timeout for the api request
       EnableVless: false # Enable Vless for V2ray Type
-      EnableXTLS: false # Enable XTLS for V2ray and Trojan
+      EnableXTLS: true # Enable XTLS for V2ray and Trojan
       SpeedLimit: 0 # Mbps, Local settings will replace remote settings, 0 means disable
       DeviceLimit: 0 # Local settings will replace remote settings, 0 means disable
       RuleListPath: # ./rulelist Path to local rulelist file
@@ -193,7 +105,7 @@ Nodes:
       EnableDNS: false # Use custom DNS config, Please ensure that you set the dns.json well
       DNSType: AsIs # AsIs, UseIP, UseIPv4, UseIPv6, DNS strategy
       EnableProxyProtocol: false # Only works for WebSocket and TCP
-      EnableFallback: true # Only support for Trojan and Vless
+      EnableFallback: false # Only support for Trojan and Vless
       FallBackConfigs:  # Support multiple fallbacks
         -
           SNI: # TLS SNI(Server Name Indication), Empty for any
@@ -219,7 +131,7 @@ Nodes:
   #     NodeType: Shadowsocks # Node type: V2ray, Shadowsocks, Trojan
   #     Timeout: 30 # Timeout for the api request
   #     EnableVless: false # Enable Vless for V2ray Type
-  #     EnableXTLS: false # Enable XTLS for V2ray and Trojan
+  #     EnableXTLS: true # Enable XTLS for V2ray and Trojan
   #     SpeedLimit: 0 # Mbps, Local settings will replace remote settings
   #     DeviceLimit: 0 # Local settings will replace remote settings
   #   ControllerConfig:
@@ -342,9 +254,7 @@ backend_docking_set(){
         check_docker
         xrayr_file
         crt_file
-	configure_dns
-        configure_fail2ban
-	docker run --restart=always --name xrayr -d -v /usr/local/xrayr/config.yml:/etc/XrayR/config.yml -v /usr/local/xrayr/certificate.crt:/etc/XrayR/certificate.crt -v /usr/local/xrayr/private.key:/etc/XrayR/private.key --network=host crackair/xrayr:latest
+        docker run --restart=always --name xrayr -d -v /usr/local/xrayr/config.yml:/etc/XrayR/config.yml -v /usr/local/xrayr/certificate.crt:/etc/XrayR/certificate.crt -v /usr/local/xrayr/private.key:/etc/XrayR/private.key --network=host crackair/xrayr:latest
         greenbg "恭喜您，后端节点已搭建成功"
         end=$(date "+%s")
         echo 安装总耗时:$[$end-$start]"秒"           
