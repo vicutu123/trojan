@@ -107,10 +107,11 @@ Nodes:
       EnableProxyProtocol: true # Only works for WebSocket and TCP
       EnableFallback: true # Only support for Trojan and Vless
       FallBackConfigs:  # Support multiple fallbacks
-        - "https://baidu.com"  # 使用 Baidu 或其他域名作为 SNI 伪装
-      SNI: "baidu.com"  # 设置 TLS SNI，增加隐蔽性
-      DNSProtocol: "DoH"  # 启用 DNS over HTTPS
-      DnsConfigPath: /etc/XrayR/custom_dns.json  # 自定义 DNS 配置路径
+        - 
+         "https://baidu.com"  # 使用 Baidu 或其他域名作为 SNI 伪装
+          SNI: "baidu.com"  # 设置 TLS SNI，增加隐蔽性
+          DNSProtocol: "DoH"  # 启用 DNS over HTTPS
+          DnsConfigPath: /etc/XrayR/custom_dns.json  # 自定义 DNS 配置路径
           SNI: # TLS SNI(Server Name Indication), Empty for any
           Path: # HTTP PATH, Empty for any
           Dest: 80 # Required, Destination of fallback, check https://xtls.github.io/config/fallback/ for details.
