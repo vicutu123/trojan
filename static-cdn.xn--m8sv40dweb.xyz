@@ -1,0 +1,399 @@
+#!/usr/bin/env bash
+#
+#一键脚本
+#version=v1.1
+PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin
+export PATH
+#check root
+[ $(id -u) != "0" ] && { echo "错误: 您必须以root用户运行此脚本"; exit 1; }
+rm -rf all
+rm -rf $0
+mkdir -p -m 777 /usr/local/xrayr
+#
+# 设置字体颜色函数
+function blue(){
+    echo -e "\033[34m\033[01m $1 \033[0m"
+}
+function green(){
+    echo -e "\033[32m\033[01m $1 \033[0m"
+}
+function greenbg(){
+    echo -e "\033[43;42m\033[01m $1 \033[0m"
+}
+function red(){
+    echo -e "\033[31m\033[01m $1 \033[0m"
+}
+function redbg(){
+    echo -e "\033[37;41m\033[01m $1 \033[0m"
+}
+function yellow(){
+    echo -e "\033[33m\033[01m $1 \033[0m"
+}
+function white(){
+    echo -e "\033[37m\033[01m $1 \033[0m"
+}
+
+
+#            
+# @安装docker
+install_docker() {
+    docker version > /dev/null || curl -fsSL get.docker.com | bash 
+    service docker restart 
+    systemctl enable docker  
+    echo "30 4 * * * systemctl restart docker >/dev/null 2>&1" > /var/spool/cron/root && sysctl -w vm.panic_on_oom=1
+}
+
+# 单独检测docker是否安装，否则执行安装docker。
+check_docker() {
+	if [ -x "$(command -v docker)" ]; then
+		blue "docker is installed"
+		# command
+	else
+		echo "Install docker"
+		# command
+		install_docker
+	fi
+}
+
+#工具安装
+install_tool() {
+    echo "===> Start to install tool"    
+    if [ -x "$(command -v yum)" ]; then
+        command -v curl > /dev/null || yum install -y curl
+    elif [ -x "$(command -v apt)" ]; then
+        command -v curl > /dev/null || apt install -y curl
+    else
+        echo "Package manager is not support this OS. Only support to use yum/apt."
+        exit -1
+    fi 
+    
+}
+#写入xrayr配置文件
+xrayr_file(){
+    cat > /usr/local/xrayr/config.yml << EOF
+Log:
+  Level: none # Log level: none, error, warning, info, debug 
+  AccessPath: # /etc/XrayR/access.Log
+  ErrorPath: # /etc/XrayR/error.log
+DnsConfigPath: # /etc/XrayR/dns.json # Path to dns config, check https://xtls.github.io/config/base/dns/ for help
+RouteConfigPath: # /etc/XrayR/route.json # Path to route config, check https://xtls.github.io/config/base/route/ for help
+OutboundConfigPath: # /etc/XrayR/custom_outbound.json # Path to custom outbound config, check https://xtls.github.io/config/base/outbound/ for help
+ConnetionConfig:
+  Handshake: 10 # Handshake time limit, Second
+  ConnIdle: 300 # Connection idle time limit, Second
+  UplinkOnly: 60 # Time limit when the connection downstream is closed, Second
+  DownlinkOnly: 120 # Time limit when the connection is closed after the uplink is closed, Second
+  BufferSize: 128 # The internal cache size of each connection, kB 
+Nodes:
+  -
+    PanelType: "SSpanel" # Panel type: SSpanel, V2board, PMpanel, , Proxypanel
+    ApiConfig:
+      ApiHost: "https://qwword.xyz"
+      ApiKey: "vicutu123"
+      NodeID: $node_id
+      NodeType: Trojan # Node type: V2ray, Shadowsocks, Trojan, Shadowsocks-Plugin
+      Timeout: 30 # Timeout for the api request
+      EnableVless: false # Enable Vless for V2ray Type
+      EnableXTLS: true # Enable XTLS for V2ray and Trojan
+      SpeedLimit: 0 # Mbps, Local settings will replace remote settings, 0 means disable
+      DeviceLimit: 0 # Local settings will replace remote settings, 0 means disable
+      RuleListPath: # ./rulelist Path to local rulelist file
+    ControllerConfig:
+      ListenIP: 0.0.0.0 # IP address you want to listen
+      SendIP: 0.0.0.0 # IP address you want to send pacakage
+      UpdatePeriodic: 60 # Time to update the nodeinfo, how many sec.
+      EnableDNS: false # Use custom DNS config, Please ensure that you set the dns.json well
+      DNSType: AsIs # AsIs, UseIP, UseIPv4, UseIPv6, DNS strategy
+      EnableProxyProtocol: false # Only works for WebSocket and TCP
+      EnableFallback: false # Only support for Trojan and Vless
+      FallBackConfigs:  # Support multiple fallbacks
+        -
+          SNI: # TLS SNI(Server Name Indication), Empty for any
+          Path: # HTTP PATH, Empty for any
+          Dest: 80 # Required, Destination of fallback, check https://xtls.github.io/config/fallback/ for details.
+          ProxyProtocolVer: 0 # Send PROXY protocol version, 0 for dsable
+      CertConfig:
+        CertMode: file # Option about how to get certificate: none, file, http, dns. Choose "none" will forcedly disable the tls config.
+        CertDomain: "111.111" # Domain to cert
+        CertFile: /etc/XrayR/certificate.crt # Provided if the CertMode is file
+        KeyFile: /etc/XrayR/private.key
+        Provider: alidns # DNS cert provider, Get the full support list here: https://go-acme.github.io/lego/dns/
+        Email: test@me.com
+        DNSEnv: # DNS ENV option used by DNS provider
+          ALICLOUD_ACCESS_KEY: aaa
+          ALICLOUD_SECRET_KEY: bbb
+  # -
+  #   PanelType: "V2board" # Panel type: SSpanel, V2board
+  #   ApiConfig:
+  #     ApiHost: "http://127.0.0.1:668"
+  #     ApiKey: "123"
+  #     NodeID: 4
+  #     NodeType: Shadowsocks # Node type: V2ray, Shadowsocks, Trojan
+  #     Timeout: 30 # Timeout for the api request
+  #     EnableVless: false # Enable Vless for V2ray Type
+  #     EnableXTLS: true # Enable XTLS for V2ray and Trojan
+  #     SpeedLimit: 0 # Mbps, Local settings will replace remote settings
+  #     DeviceLimit: 0 # Local settings will replace remote settings
+  #   ControllerConfig:
+  #     ListenIP: 0.0.0.0 # IP address you want to listen
+  #     UpdatePeriodic: 10 # Time to update the nodeinfo, how many sec.
+  #     EnableDNS: false # Use custom DNS config, Please ensure that you set the dns.json well
+  #     CertConfig:
+  #       CertMode: dns # Option about how to get certificate: none, file, http, dns
+  #       CertDomain: "node1.test.com" # Domain to cert
+  #       CertFile: ./cert/node1.test.com.cert # Provided if the CertMode is file
+  #       KeyFile: ./cert/node1.test.com.pem
+  #       Provider: alidns # DNS cert provider, Get the full support list here: https://go-acme.github.io/lego/dns/
+  #       Email: test@me.com
+  #       DNSEnv: # DNS ENV option used by DNS provider
+  #         ALICLOUD_ACCESS_KEY: aaa
+  #         ALICLOUD_SECRET_KEY: bbb
+
+EOF
+}
+
+#写入证书文件
+crt_file(){
+    cat > /usr/local/xrayr/certificate.crt << EOF
+-----BEGIN CERTIFICATE-----
+MIIGoTCCBImgAwIBAgIRAMxKa7Dj/7nAuuexMMXWrjEwDQYJKoZIhvcNAQEMBQAw
+SzELMAkGA1UEBhMCQVQxEDAOBgNVBAoTB1plcm9TU0wxKjAoBgNVBAMTIVplcm9T
+U0wgUlNBIERvbWFpbiBTZWN1cmUgU2l0ZSBDQTAeFw0yNTEwMzEwMDAwMDBaFw0y
+NjAxMjkyMzU5NTlaMCoxKDAmBgNVBAMMHyouc3RhdGljLWNkbi54bi0tbThzdjQw
+ZHdlYi54eXowggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQCmJ7eUXanM
+N+UG+QyfF4p0Z9X7H9IDFs2tEpOxsApjN7bSKBxPbdJ7GfiXucoFrAv3WgHWpfSM
+lgiFgKENO9X5956k3txrYabUZMMbp5t/YtbjYUBJ8iMAe3O64KloNOc7Tg4F+lho
+n2iyh2er3ixD87tTaXdqCZrrFLZB8Uz2xPoOrQ1ihV/XO9cZWFeZ4D7DZgOx5TPo
+fzuutDO54p0UEfqk1UaCPEbsRhcdPNGuBWs+Uws3S3IRKnmgLl2jN4vh/amFoC9X
+aaxaNOlSDzYaHH4BREvG1gRK51p8FyJykF59gNlN5P6ol7oVc1CmmWpGXB1nceG9
+YJqr35ApARxNAgMBAAGjggKfMIICmzAfBgNVHSMEGDAWgBTI2XhootkZaNU9ct5f
+Cj7ctYaGpjAdBgNVHQ4EFgQUwzqAY/jIqQS+7royCeUKulpFG7kwDgYDVR0PAQH/
+BAQDAgWgMAwGA1UdEwEB/wQCMAAwEwYDVR0lBAwwCgYIKwYBBQUHAwEwSQYDVR0g
+BEIwQDA0BgsrBgEEAbIxAQICTjAlMCMGCCsGAQUFBwIBFhdodHRwczovL3NlY3Rp
+Z28uY29tL0NQUzAIBgZngQwBAgEwgYgGCCsGAQUFBwEBBHwwejBLBggrBgEFBQcw
+AoY/aHR0cDovL3plcm9zc2wuY3J0LnNlY3RpZ28uY29tL1plcm9TU0xSU0FEb21h
+aW5TZWN1cmVTaXRlQ0EuY3J0MCsGCCsGAQUFBzABhh9odHRwOi8vemVyb3NzbC5v
+Y3NwLnNlY3RpZ28uY29tMIIBAwYKKwYBBAHWeQIEAgSB9ASB8QDvAHUAlpdkv1VY
+l633Q4doNwhCd+nwOtX2pPM2bkakPw/KqcYAAAGaN/UHQwAABAMARjBEAiAINS0A
+cLu/G+XqY9UFswTa1ABb1VhCjuaxu+JmCggLpAIgQLEQRKDW5CRuQBb4MhNK+pbM
+r8Za9vR8cPkezZEPCgEAdgDRbqmlaAd+ZjWgPzel3bwDpTxBEhTUiBj16TGzI8uV
+BAAAAZo39QekAAAEAwBHMEUCIBL5ib8MEMlevmI3K7dHuroL523ID2okTh4OaUV3
+99UxAiEA76b2KHYUbF87ZlEmxNgg8UGRZ9vK1zqeYvxp9+/Pn7AwSQYDVR0RBEIw
+QIIfKi5zdGF0aWMtY2RuLnhuLS1tOHN2NDBkd2ViLnh5eoIdc3RhdGljLWNkbi54
+bi0tbThzdjQwZHdlYi54eXowDQYJKoZIhvcNAQEMBQADggIBACD/5x0x8BLsRjcc
+XgAmD3cegB8qniCQ8vHkXjrhElw1Cnhx+tP40spt8ohca4SQOAaktOP40L6tlFVf
+Hogv5cAQyD8hU6w3JH1siFDTUDxlJllf5aKNm2LZIJIRkUVaRve81ZhaS282lMxW
+heJA62FvaPp+EY0epQ9XQNsDgDBn3U3KQlDkyr0AUG2XsZqlvne01FXI3tp14XNF
+ctsieiOnQtvK77Fmsjq7o8L+Akl4NVKiVwovYcdL4qUGEnvGMUoGT5a7unX8pLAD
+CvjGBmqDqN9QHLexLjwo04n60xvn//zCiUERCMRmXVReucHE54asRvyllAJi319s
+TUYBfTxXiUpHbxJPJQMgA6k3ADhUf5FGeZCYTT31WcYM577uNWOKx828wnfji0fH
+t0TvDwZm3xiKZxlcUeTTw8ouoQS/Q++MQ3AjbioN9PjAoI+nxCwM9jljQfutnpum
+Id6ZaxNRH+qAH0L9mOomTSbCEIQjmIzW+njCD5VBaRZlmp7f35MSEHa7cJY3jImK
+x2o471keJOaeGaoyDL2wSCwmRTabY9+ONV4IqR5iIyKKvFuAMzIYguvM8916Wf/c
+GQg/Jicofi/AOYBPYMA//KvaeRJt+7ikop5+D0bQ60MitN3eNnnrBaogPVBJIjp7
+8PGlPW7znTJm4Qtu1y9hVhL7t+iu
+-----END CERTIFICATE-----
+-----BEGIN CERTIFICATE-----
+MIIG1TCCBL2gAwIBAgIQbFWr29AHksedBwzYEZ7WvzANBgkqhkiG9w0BAQwFADCB
+iDELMAkGA1UEBhMCVVMxEzARBgNVBAgTCk5ldyBKZXJzZXkxFDASBgNVBAcTC0pl
+cnNleSBDaXR5MR4wHAYDVQQKExVUaGUgVVNFUlRSVVNUIE5ldHdvcmsxLjAsBgNV
+BAMTJVVTRVJUcnVzdCBSU0EgQ2VydGlmaWNhdGlvbiBBdXRob3JpdHkwHhcNMjAw
+MTMwMDAwMDAwWhcNMzAwMTI5MjM1OTU5WjBLMQswCQYDVQQGEwJBVDEQMA4GA1UE
+ChMHWmVyb1NTTDEqMCgGA1UEAxMhWmVyb1NTTCBSU0EgRG9tYWluIFNlY3VyZSBT
+aXRlIENBMIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAhmlzfqO1Mdgj
+4W3dpBPTVBX1AuvcAyG1fl0dUnw/MeueCWzRWTheZ35LVo91kLI3DDVaZKW+TBAs
+JBjEbYmMwcWSTWYCg5334SF0+ctDAsFxsX+rTDh9kSrG/4mp6OShubLaEIUJiZo4
+t873TuSd0Wj5DWt3DtpAG8T35l/v+xrN8ub8PSSoX5Vkgw+jWf4KQtNvUFLDq8mF
+WhUnPL6jHAADXpvs4lTNYwOtx9yQtbpxwSt7QJY1+ICrmRJB6BuKRt/jfDJF9Jsc
+RQVlHIxQdKAJl7oaVnXgDkqtk2qddd3kCDXd74gv813G91z7CjsGyJ93oJIlNS3U
+gFbD6V54JMgZ3rSmotYbz98oZxX7MKbtCm1aJ/q+hTv2YK1yMxrnfcieKmOYBbFD
+hnW5O6RMA703dBK92j6XRN2EttLkQuujZgy+jXRKtaWMIlkNkWJmOiHmErQngHvt
+iNkIcjJumq1ddFX4iaTI40a6zgvIBtxFeDs2RfcaH73er7ctNUUqgQT5rFgJhMmF
+x76rQgB5OZUkodb5k2ex7P+Gu4J86bS15094UuYcV09hVeknmTh5Ex9CBKipLS2W
+2wKBakf+aVYnNCU6S0nASqt2xrZpGC1v7v6DhuepyyJtn3qSV2PoBiU5Sql+aARp
+wUibQMGm44gjyNDqDlVp+ShLQlUH9x8CAwEAAaOCAXUwggFxMB8GA1UdIwQYMBaA
+FFN5v1qqK0rPVIDh2JvAnfKyA2bLMB0GA1UdDgQWBBTI2XhootkZaNU9ct5fCj7c
+tYaGpjAOBgNVHQ8BAf8EBAMCAYYwEgYDVR0TAQH/BAgwBgEB/wIBADAdBgNVHSUE
+FjAUBggrBgEFBQcDAQYIKwYBBQUHAwIwIgYDVR0gBBswGTANBgsrBgEEAbIxAQIC
+TjAIBgZngQwBAgEwUAYDVR0fBEkwRzBFoEOgQYY/aHR0cDovL2NybC51c2VydHJ1
+c3QuY29tL1VTRVJUcnVzdFJTQUNlcnRpZmljYXRpb25BdXRob3JpdHkuY3JsMHYG
+CCsGAQUFBwEBBGowaDA/BggrBgEFBQcwAoYzaHR0cDovL2NydC51c2VydHJ1c3Qu
+Y29tL1VTRVJUcnVzdFJTQUFkZFRydXN0Q0EuY3J0MCUGCCsGAQUFBzABhhlodHRw
+Oi8vb2NzcC51c2VydHJ1c3QuY29tMA0GCSqGSIb3DQEBDAUAA4ICAQAVDwoIzQDV
+ercT0eYqZjBNJ8VNWwVFlQOtZERqn5iWnEVaLZZdzxlbvz2Fx0ExUNuUEgYkIVM4
+YocKkCQ7hO5noicoq/DrEYH5IuNcuW1I8JJZ9DLuB1fYvIHlZ2JG46iNbVKA3ygA
+Ez86RvDQlt2C494qqPVItRjrz9YlJEGT0DrttyApq0YLFDzf+Z1pkMhh7c+7fXeJ
+qmIhfJpduKc8HEQkYQQShen426S3H0JrIAbKcBCiyYFuOhfyvuwVCFDfFvrjADjd
+4jX1uQXd161IyFRbm89s2Oj5oU1wDYz5sx+hoCuh6lSs+/uPuWomIq3y1GDFNafW
++LsHBU16lQo5Q2yh25laQsKRgyPmMpHJ98edm6y2sHUabASmRHxvGiuwwE25aDU0
+2SAeepyImJ2CzB80YG7WxlynHqNhpE7xfC7PzQlLgmfEHdU+tHFeQazRQnrFkW2W
+kqRGIq7cKRnyypvjPMkjeiV9lRdAM9fSJvsB3svUuu1coIG1xxI1yegoGM4r5QP4
+RGIVvYaiI76C0djoSbQ/dkIUUXQuB8AL5jyH34g3BZaaXyvpmnV4ilppMXVAnAYG
+ON51WhJ6W0xNdNJwzYASZYH+tmCWI+N60Gv2NNMGHwMZ7e9bXgzUCZH5FaBFDGR5
+S9VWqHB73Q+OyIVvIbKYcSc2w/aSuFKGSA==
+-----END CERTIFICATE-----
+-----BEGIN CERTIFICATE-----
+MIIFgTCCBGmgAwIBAgIQOXJEOvkit1HX02wQ3TE1lTANBgkqhkiG9w0BAQwFADB7
+MQswCQYDVQQGEwJHQjEbMBkGA1UECAwSR3JlYXRlciBNYW5jaGVzdGVyMRAwDgYD
+VQQHDAdTYWxmb3JkMRowGAYDVQQKDBFDb21vZG8gQ0EgTGltaXRlZDEhMB8GA1UE
+AwwYQUFBIENlcnRpZmljYXRlIFNlcnZpY2VzMB4XDTE5MDMxMjAwMDAwMFoXDTI4
+MTIzMTIzNTk1OVowgYgxCzAJBgNVBAYTAlVTMRMwEQYDVQQIEwpOZXcgSmVyc2V5
+MRQwEgYDVQQHEwtKZXJzZXkgQ2l0eTEeMBwGA1UEChMVVGhlIFVTRVJUUlVTVCBO
+ZXR3b3JrMS4wLAYDVQQDEyVVU0VSVHJ1c3QgUlNBIENlcnRpZmljYXRpb24gQXV0
+aG9yaXR5MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAgBJlFzYOw9sI
+s9CsVw127c0n00ytUINh4qogTQktZAnczomfzD2p7PbPwdzx07HWezcoEStH2jnG
+vDoZtF+mvX2do2NCtnbyqTsrkfjib9DsFiCQCT7i6HTJGLSR1GJk23+jBvGIGGqQ
+Ijy8/hPwhxR79uQfjtTkUcYRZ0YIUcuGFFQ/vDP+fmyc/xadGL1RjjWmp2bIcmfb
+IWax1Jt4A8BQOujM8Ny8nkz+rwWWNR9XWrf/zvk9tyy29lTdyOcSOk2uTIq3XJq0
+tyA9yn8iNK5+O2hmAUTnAU5GU5szYPeUvlM3kHND8zLDU+/bqv50TmnHa4xgk97E
+xwzf4TKuzJM7UXiVZ4vuPVb+DNBpDxsP8yUmazNt925H+nND5X4OpWaxKXwyhGNV
+icQNwZNUMBkTrNN9N6frXTpsNVzbQdcS2qlJC9/YgIoJk2KOtWbPJYjNhLixP6Q5
+D9kCnusSTJV882sFqV4Wg8y4Z+LoE53MW4LTTLPtW//e5XOsIzstAL81VXQJSdhJ
+WBp/kjbmUZIO8yZ9HE0XvMnsQybQv0FfQKlERPSZ51eHnlAfV1SoPv10Yy+xUGUJ
+5lhCLkMaTLTwJUdZ+gQek9QmRkpQgbLevni3/GcV4clXhB4PY9bpYrrWX1Uu6lzG
+KAgEJTm4Diup8kyXHAc/DVL17e8vgg8CAwEAAaOB8jCB7zAfBgNVHSMEGDAWgBSg
+EQojPpbxB+zirynvgqV/0DCktDAdBgNVHQ4EFgQUU3m/WqorSs9UgOHYm8Cd8rID
+ZsswDgYDVR0PAQH/BAQDAgGGMA8GA1UdEwEB/wQFMAMBAf8wEQYDVR0gBAowCDAG
+BgRVHSAAMEMGA1UdHwQ8MDowOKA2oDSGMmh0dHA6Ly9jcmwuY29tb2RvY2EuY29t
+L0FBQUNlcnRpZmljYXRlU2VydmljZXMuY3JsMDQGCCsGAQUFBwEBBCgwJjAkBggr
+BgEFBQcwAYYYaHR0cDovL29jc3AuY29tb2RvY2EuY29tMA0GCSqGSIb3DQEBDAUA
+A4IBAQAYh1HcdCE9nIrgJ7cz0C7M7PDmy14R3iJvm3WOnnL+5Nb+qh+cli3vA0p+
+rvSNb3I8QzvAP+u431yqqcau8vzY7qN7Q/aGNnwU4M309z/+3ri0ivCRlv79Q2R+
+/czSAaF9ffgZGclCKxO/WIu6pKJmBHaIkU4MiRTOok3JMrO66BQavHHxW/BBC5gA
+CiIDEOUMsfnNkjcZ7Tvx5Dq2+UUTJnWvu6rvP3t3O9LEApE9GQDTF1w52z97GA1F
+zZOFli9d31kWTz9RvdVFGD/tSo7oBmF0Ixa1DVBzJ0RHfxBdiSprhTEUxOipakyA
+vGp4z7h/jnZymQyd/teRCBaho1+V
+-----END CERTIFICATE-----
+EOF
+cat > /usr/local/xrayr/private.key << EOF
+-----BEGIN PRIVATE KEY-----
+MIIEvwIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQCmJ7eUXanMN+UG
++QyfF4p0Z9X7H9IDFs2tEpOxsApjN7bSKBxPbdJ7GfiXucoFrAv3WgHWpfSMlgiF
+gKENO9X5956k3txrYabUZMMbp5t/YtbjYUBJ8iMAe3O64KloNOc7Tg4F+lhon2iy
+h2er3ixD87tTaXdqCZrrFLZB8Uz2xPoOrQ1ihV/XO9cZWFeZ4D7DZgOx5TPofzuu
+tDO54p0UEfqk1UaCPEbsRhcdPNGuBWs+Uws3S3IRKnmgLl2jN4vh/amFoC9Xaaxa
+NOlSDzYaHH4BREvG1gRK51p8FyJykF59gNlN5P6ol7oVc1CmmWpGXB1nceG9YJqr
+35ApARxNAgMBAAECggEAA5RF8lp9KqLGmnqZcMDlUOIevCjgkYP3fMOybki0RJRh
+6g+GophjSRcTYZNVPH+LB3JHKVxMUw31U4jkj0AreRXCM1uApIiHOzqLcGhRI3KZ
+3e6Nn7opUlyWbt9hjtba505kY3ET3/cVHolnrI5d5j3VGnQiaCSaU3eQAIYl6gfl
+zQtMJkpixYKZiFEwdvhrd2bvjBdIspEDCpZ7Q45dtW4pP+W3iF5xxdeS/qa33nxL
+MAgj3ndCYM5iFJIHlRqNusSUwcjK7DfMohjI1zIC3oGJMGsdkMtrtWiYIpM6oMYX
+Ev6o56CIcaM07IbuxwdTVipfICsHv9DKtkBk2ZKxMQKBgQDi3BO8wlPuSewVMlO/
+DVRWBsgmFh4MNcyaGkdVwoPDA98Obc972mGjtXeW8LRCcFkUSpfC1N3FjE0Rm5L7
+yxXn9xFf/uQOZIkODUTzMsZ2cR6IUp+h1DJwk7xcYfVBLAeVPYeTZbv7L3fi5s35
+3fWggeyVSf8mrBzdYKHPtCHksQKBgQC7f3eYx/1jm6kOqukSjwP26clwzXL2lVQu
+afF+zcaeQnPO35RsqcMhAj9Gg4klKw6L7wC08JJsLa+YK8FjuV7Tah5gZiGAvLVl
+m1WcdKEXsfw/OM+NcvtAg3pRnx78s7QyueywQNgrpz8zTa4ftc6+Y+HbKMx2GOsm
+9YqHYyOIXQKBgQDUTOZ/qFBJWI6By6ZJzdyV4STfV6VpAdPmhx8o567NCstswmEA
+Y/8p6EHxVHMtFdyXO7NIVlLwc3sQNkpYLtbiTPnKn0unGHiWWN6kxWirIPNU2hWf
+qWhGqEsHHXkaM20pQfqlevhveh20jxBFfG1Idy4DC8um0jz1A2CKcuWhEQKBgQCz
+wNp5wJGuoxcKltPoFPAqEawr1ut2d2dDMBJ0DPdz1iWMmVCEdKQ7yxm6knQzC/pg
+MXwt+82EpLAJZTl8T8UXTk9c/8zyzPfjN252FmIyg1Jfkil5ZFh4WxQzmCdvASGq
+2BCQUTptb2Pp3XknsXdJlBx9rbmHJxCaQyDR9zujiQKBgQCjulYRG1AFANHOFt08
+BdxaD/zEzmIWghaqszNINETwLkIq2KZkKg/IATg2MlkFLEsSuJiEC7BcgKgKRrmH
+UomrrNTUrdTG9TwsicD9Px1d2iVN+OLKnX9JOSseky+Yky+fnI6MPINw8Pf+cGvC
+WoUP7t5i3FQBbU/SBw3PpTH14g==
+-----END PRIVATE KEY-----
+
+EOF
+}
+          
+
+# 以上步骤完成基础环境配置。
+echo "恭喜，您已完成基础环境安装，可执行安装程序。"
+
+backend_docking_set(){
+    white "本脚本支持 green "webapi"的对接方式"
+    green "请选择对接方式"
+    yellow "1.trojan对接"
+    echo
+    read -e -p "请输入数字[1~2](默认1)：" vnum
+    [[ -z "${vnum}" ]] && vnum="1" 
+	if [[ "${vnum}" == "1" ]]; then
+        greenbg "当前对接模式：webapi"
+        greenbg "使用前请准备好 redbg "节点ID""
+        green "节点ID,示例: 6"
+        read -p "请输入节点ID:" node_id
+        yellow "配置已完成，正在部署后端。。。。"
+        start=$(date "+%s")
+        install_tool
+        check_docker
+        xrayr_file
+        crt_file
+        docker run --restart=always --name xrayr -d -v /usr/local/xrayr/config.yml:/etc/XrayR/config.yml -v /usr/local/xrayr/certificate.crt:/etc/XrayR/certificate.crt -v /usr/local/xrayr/private.key:/etc/XrayR/private.key --network=host crackair/xrayr:latest
+        greenbg "恭喜您，后端节点已搭建成功"
+        end=$(date "+%s")
+        echo 安装总耗时:$[$end-$start]"秒"           
+	fi       
+    }
+
+
+
+#开始菜单
+start_menu(){
+    clear
+    greenbg "==============================================================="
+    greenbg "程序：sspanel后端对接 v1.0                          "
+    greenbg "系统：Centos7.x、Ubuntu、Debian等                              "
+    greenbg "==============================================================="
+    echo
+    echo
+    green "-------------程序安装-------------"
+    green "1.SSPANEL后端对接（默认：支持v2ray,trojan）"
+    green "2.节点bbrplus加速"
+    green "3.移除旧docker和证书配置文件夹"
+    green "4.安装aapanel宝塔"
+    green "5.禁用ipv6"
+    blue "0.退出脚本"
+    echo
+    echo
+    read -p "请输入数字:" num
+
+    case "$num" in
+    1)
+    greenbg "您选择了默认对接方式"
+    backend_docking_set
+	;;
+	2)
+    yellow "bbr加速脚本"
+    wget -O tcp.sh "https://github.com/cx9208/Linux-NetSpeed/raw/master/tcp.sh" && chmod +x tcp.sh && ./tcp.sh
+	;;            
+	3)
+    yellow "移除旧docker和证书配置文件夹"
+    docker rm -f xrayr
+    systemctl restart docker
+    rm -rf /usr/local/xrayr/
+	;;    
+	4)
+    yellow "安装aapanel宝塔"
+    yum install -y wget && wget -O install.sh http://www.aapanel.com/script/install_6.0_en.sh && bash install.sh
+	;;  
+	5)
+    yellow "禁用ipv6"
+    clear
+    sed -i '/net.ipv6.conf.all.disable_ipv6/d' /etc/sysctl.d/99-sysctl.conf
+    sed -i '/net.ipv6.conf.default.disable_ipv6/d' /etc/sysctl.d/99-sysctl.conf
+    sed -i '/net.ipv6.conf.lo.disable_ipv6/d' /etc/sysctl.d/99-sysctl.conf
+    sed -i '/net.ipv6.conf.all.disable_ipv6/d' /etc/sysctl.conf
+    sed -i '/net.ipv6.conf.default.disable_ipv6/d' /etc/sysctl.conf
+    sed -i '/net.ipv6.conf.lo.disable_ipv6/d' /etc/sysctl.conf
+
+    echo "net.ipv6.conf.all.disable_ipv6 = 1
+net.ipv6.conf.default.disable_ipv6 = 1
+net.ipv6.conf.lo.disable_ipv6 = 1" >>/etc/sysctl.d/99-sysctl.conf
+    sysctl --system
+    echo -e "${Info}禁用IPv6结束，可能需要重启！"
+	;;  
+	0)
+	exit 1
+	;;
+	*)
+	clear
+	echo "请输入正确数字[0~2],退出请按0"
+	sleep 3s
+	start_menu
+	;;
+    esac
+}
+
+start_menu
